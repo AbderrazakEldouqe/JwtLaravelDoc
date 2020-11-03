@@ -6,6 +6,8 @@ use App\Helpers\AppHelper;
 use App\Http\Requests\AuthRequests\LoginFormRequest;
 use App\Http\Requests\AuthRequests\RegistrationFormRequest;
 use App\Http\Resources\UserResource;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use JWTAuth;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -27,8 +29,16 @@ class AuthController extends Controller
         if (!$token = JWTAuth::attempt($input)) {
             return AppHelper::loginError();
         }
-
-        return $this->respondWithToken($token);
+        DB::connection()->enableQueryLog();
+        $user = User::where('email', '=', $request->email)
+            ->first();
+//         $queries = DB::getQueryLog();
+//        return dd($queries);
+        if (Hash::check($request->password, $user->password)) {
+            return $this->respondWithToken($token, $user->user_id_public);
+        } else {
+            return AppHelper::loginError();
+        }
     }
 
     /**
@@ -64,7 +74,7 @@ class AuthController extends Controller
         $user->password = bcrypt($request->password);
         if ($user->save()) {
             return new UserResource($user);
-        }else{
+        } else {
             return AppHelper::registerError();
         }
     }
@@ -76,11 +86,12 @@ class AuthController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    protected function respondWithToken($token)
+    protected function respondWithToken($token, $id)
     {
         return response()->json([
             'success' => true,
-            'access_token' => $token,
+            'token' => $token,
+            'id' => $id,
             'token_type' => 'bearer',
             'expires_in' => auth()->factory()->getTTL() * 60
         ]);
